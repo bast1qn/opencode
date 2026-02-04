@@ -957,9 +957,7 @@ export function Session() {
       <box flexDirection="row">
         <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
-            <Show when={!sidebarVisible() || !wide()}>
-              <Header />
-            </Show>
+            <Header />
             <scrollbox
               ref={(r) => (scroll = r)}
               viewportOptions={{

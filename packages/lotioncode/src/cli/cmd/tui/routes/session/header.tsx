@@ -9,12 +9,16 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { Installation } from "@/installation"
 import { useTerminalDimensions } from "@opentui/solid"
+import { useToast } from "../../ui/toast"
+import { $ } from "bun"
+import { createStore } from "solid-js/store"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
   return (
     <text fg={theme.text}>
       <span style={{ bold: true }}>#</span> <span style={{ bold: true }}>{props.session().title}</span>
+      <span style={{ fg: theme.success }}> [GIT]</span>
     </text>
   )
 }
@@ -35,6 +39,60 @@ export function Header() {
   const sync = useSync()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const toast = useToast()
+
+  const [gitLoading, setGitLoading] = createStore({
+    pull: false,
+    push: false,
+    commit: false,
+    pr: false,
+  })
+
+  const handleGitPull = async () => {
+    setGitLoading("pull", true)
+    const result = await $`git pull origin dev`.nothrow()
+    if (result.exitCode === 0) {
+      toast.show({ message: "Git pull completed", variant: "success" })
+    } else {
+      toast.show({ message: "Git pull failed", variant: "error" })
+    }
+    setGitLoading("pull", false)
+  }
+
+  const handleGitPush = async () => {
+    setGitLoading("push", true)
+    const result = await $`git push origin dev`.nothrow()
+    if (result.exitCode === 0) {
+      toast.show({ message: "Git push completed", variant: "success" })
+    } else {
+      toast.show({ message: "Git push failed", variant: "error" })
+    }
+    setGitLoading("push", false)
+  }
+
+  const handleGitCommit = async () => {
+    setGitLoading("commit", true)
+    await $`git add .`.nothrow()
+    const result = await $`git commit -m "feat: update"`.nothrow()
+    if (result.exitCode === 0) {
+      toast.show({ message: "Git commit completed", variant: "success" })
+    } else {
+      toast.show({ message: "Git commit failed", variant: "error" })
+    }
+    setGitLoading("commit", false)
+  }
+
+  const handleCreatePR = async () => {
+    setGitLoading("pr", true)
+    await $`git push -u origin dev`.nothrow()
+    const result = await $`gh pr create --title "feat: update" --body "Changes from session"`.nothrow()
+    if (result.exitCode === 0) {
+      toast.show({ message: "Pull request created", variant: "success" })
+    } else {
+      toast.show({ message: "Failed to create PR", variant: "error" })
+    }
+    setGitLoading("pr", false)
+  }
 
   const cost = createMemo(() => {
     const total = pipe(
@@ -128,7 +186,43 @@ export function Header() {
           </Match>
           <Match when={true}>
             <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={1}>
-              <Title session={session} />
+              <box flexDirection="row" gap={2}>
+                <Title session={session} />
+                <box flexDirection="row" gap={1}>
+                  <box
+                    backgroundColor={gitLoading.pull ? theme.backgroundElement : theme.backgroundPanel}
+                    paddingLeft={1}
+                    paddingRight={1}
+                    onMouseUp={handleGitPull}
+                  >
+                    <text fg={theme.text}>{gitLoading.pull ? "⏳" : "⬇"} Pull</text>
+                  </box>
+                  <box
+                    backgroundColor={gitLoading.push ? theme.backgroundElement : theme.backgroundPanel}
+                    paddingLeft={1}
+                    paddingRight={1}
+                    onMouseUp={handleGitPush}
+                  >
+                    <text fg={theme.text}>{gitLoading.push ? "⏳" : "⬆"} Push</text>
+                  </box>
+                  <box
+                    backgroundColor={gitLoading.commit ? theme.backgroundElement : theme.backgroundPanel}
+                    paddingLeft={1}
+                    paddingRight={1}
+                    onMouseUp={handleGitCommit}
+                  >
+                    <text fg={theme.text}>{gitLoading.commit ? "⏳" : "✓"} Commit</text>
+                  </box>
+                  <box
+                    backgroundColor={gitLoading.pr ? theme.backgroundElement : theme.backgroundPanel}
+                    paddingLeft={1}
+                    paddingRight={1}
+                    onMouseUp={handleCreatePR}
+                  >
+                    <text fg={theme.text}>{gitLoading.pr ? "⏳" : "↗"} PR</text>
+                  </box>
+                </box>
+              </box>
               <box flexDirection="row" gap={1} flexShrink={0}>
                 <ContextInfo context={context} cost={cost} />
                 <text fg={theme.textMuted}>v{Installation.VERSION}</text>
