@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build all platforms
+        run: bun run packages/lotioncode/script/build.ts
+        env:
+          LOTIONCODE_VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Create archives
+        run: |
+          cd packages/lotioncode/dist
+          for dir in lotioncode-linux-*; do
+            if [ -d "$dir" ]; then
+              tar -czf "${dir}.tar.gz" -C "$dir/bin" lotioncode
+            fi
+          done
+          for dir in lotioncode-darwin-* lotioncode-windows-*; do
+            if [ -d "$dir" ]; then
+              cd "$dir/bin"
+              zip -r "../../${dir}.zip" lotioncode* 2>/dev/null || true
+              cd ../..
+            fi
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            packages/lotioncode/dist/*.tar.gz
+            packages/lotioncode/dist/*.zip
+          generate_release_notes: true

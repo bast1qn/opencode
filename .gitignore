@@ -27,3 +27,7 @@ target
 lotioncode-dev
 logs/
 *.bun-build
+
+# Build artifacts
+*.tar.gz
+*.zip
