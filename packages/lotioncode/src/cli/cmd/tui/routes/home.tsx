@@ -1,7 +1,6 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createMemo, For, Match, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
-import { useKeybind } from "@tui/context/keybind"
 import { Logo } from "../component/logo"
 import { Tips } from "../component/tips"
 import { Locale } from "@/util/locale"
@@ -17,6 +16,7 @@ import { useCommandDialog } from "../component/dialog-command"
 import { useDialog } from "../ui/dialog"
 import { DialogTokenUsage } from "../component/dialog-token-usage"
 import { DialogMetrics } from "../component/dialog-metrics"
+import { Card, EmptyState, StatusIndicator, KeybindHint } from "../component/ui-primitives"
 
 let once = false
 
@@ -28,9 +28,9 @@ export function Home() {
   const promptRef = usePromptRef()
   const command = useCommandDialog()
   const dialog = useDialog()
+
   const mcp = createMemo(() => Object.keys(sync.data.mcp).length > 0)
   const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
-
   const connectedMcpCount = createMemo(
     () => Object.values(sync.data.mcp).filter((x) => x.status === "connected").length,
   )
@@ -43,7 +43,7 @@ export function Home() {
     [...sync.data.session]
       .filter((s) => !s.parentID)
       .sort((a, b) => b.time.updated - a.time.updated)
-      .slice(0, 3),
+      .slice(0, 5),
   )
 
   const usageStats = createMemo(() => {
@@ -92,16 +92,7 @@ export function Home() {
   const Hint = (
     <Show when={connectedMcpCount() > 0}>
       <box flexDirection="row" gap={1}>
-        <text fg={theme.text}>
-          <Switch>
-            <Match when={mcpError()}>
-              <span style={{ fg: theme.error }}>•</span> mcp errors
-            </Match>
-            <Match when={true}>
-              <span style={{ fg: theme.success }}>•</span> {connectedMcpCount()} mcp
-            </Match>
-          </Switch>
-        </text>
+        <StatusIndicator status={mcpError() ? "error" : "success"} label={`${connectedMcpCount()} mcp`} />
       </box>
     </Show>
   )
@@ -137,39 +128,64 @@ export function Home() {
         </box>
 
         <Show when={!isFirstTimeUser()}>
-          <box flexDirection="row" gap={3} paddingTop={1}>
-            <text fg={theme.textMuted}>{sync.data.session.length} sessions</text>
-            <text fg={theme.textMuted}>{usageStats().totalTokens.toLocaleString()} tokens</text>
-            <text fg={theme.textMuted}>${usageStats().totalCost.toFixed(2)}</text>
+          <box flexDirection="row" gap={4} paddingTop={1}>
+            <Card padding={1} gap={0} border={false} background={true}>
+              <box flexDirection="row" gap={1}>
+                <text fg={theme.textMuted}>Sessions</text>
+                <text fg={theme.text}>{sync.data.session.length}</text>
+              </box>
+            </Card>
+            <Card padding={1} gap={0} border={false} background={true}>
+              <box flexDirection="row" gap={1}>
+                <text fg={theme.textMuted}>Tokens</text>
+                <text fg={theme.text}>{usageStats().totalTokens.toLocaleString()}</text>
+              </box>
+            </Card>
+            <Card padding={1} gap={0} border={false} background={true}>
+              <box flexDirection="row" gap={1}>
+                <text fg={theme.textMuted}>Cost</text>
+                <text fg={theme.text}>${usageStats().totalCost.toFixed(2)}</text>
+              </box>
+            </Card>
           </box>
         </Show>
 
         <Show when={recentSessions().length > 0}>
           <box width="100%" maxWidth={75} paddingTop={2}>
             <box flexDirection="row" justifyContent="space-between" paddingBottom={1}>
-              <text fg={theme.text}>Recent</text>
-              <text fg={theme.textMuted} onMouseUp={() => command.trigger("session.list")}>
-                View all
+              <text fg={theme.text}>Recent Sessions</text>
+              <text fg={theme.primary} onMouseUp={() => command.trigger("session.list")}>
+                View all →
               </text>
             </box>
             <box flexDirection="column" gap={1}>
               <For each={recentSessions()}>
                 {(session) => (
-                  <box
-                    flexDirection="row"
-                    justifyContent="space-between"
-                    paddingLeft={1}
-                    paddingRight={1}
-                    onMouseUp={() => command.trigger(`session.open.${session.id}`)}
-                  >
-                    <text fg={theme.text} wrapMode="word">
-                      {session.title}
-                    </text>
-                    <text fg={theme.textMuted}>{Locale.todayTimeOrDateTime(session.time.updated)}</text>
-                  </box>
+                  <Card padding={1} gap={0} hover={true} onClick={() => command.trigger(`session.open.${session.id}`)}>
+                    <box flexDirection="row" justifyContent="space-between">
+                      <text fg={theme.text} wrapMode="word">
+                        {session.title}
+                      </text>
+                      <text fg={theme.textMuted}>{Locale.todayTimeOrDateTime(session.time.updated)}</text>
+                    </box>
+                  </Card>
                 )}
               </For>
             </box>
+          </box>
+        </Show>
+
+        <Show when={isFirstTimeUser()}>
+          <box width="100%" maxWidth={75} paddingTop={2}>
+            <EmptyState
+              icon="👋"
+              title="Welcome to LotionCode"
+              description="Start your first conversation to get help with coding"
+              action={{
+                label: "Type your first prompt above",
+                onClick: () => {},
+              }}
+            />
           </box>
         </Show>
 
@@ -185,7 +201,11 @@ export function Home() {
       <box padding={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
         <text fg={theme.textMuted}>{directory()}</text>
         <box flexGrow={1} />
-        <text fg={theme.textMuted}>v{Installation.VERSION}</text>
+        <box flexDirection="row" gap={3}>
+          <KeybindHint action="Commands" keybind="Ctrl+P" />
+          <KeybindHint action="Help" keybind="?" />
+          <text fg={theme.textMuted}>v{Installation.VERSION}</text>
+        </box>
       </box>
     </>
   )

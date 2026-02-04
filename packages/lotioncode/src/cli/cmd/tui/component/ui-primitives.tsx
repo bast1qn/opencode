@@ -1,5 +1,5 @@
 import { useTheme } from "@tui/context/theme"
-import { Show, type JSX } from "solid-js"
+import { Show, createSignal, createMemo, type JSX } from "solid-js"
 
 interface CardProps {
   children: JSX.Element
@@ -18,11 +18,18 @@ interface CardProps {
 
 export function Card(props: CardProps) {
   const { theme } = useTheme()
+  const [isHovered, setIsHovered] = createSignal(false)
 
   const padding = props.padding ?? 1
   const gap = props.gap ?? 1
   const border = props.border !== false
   const background = props.background !== false
+  const hover = props.hover ?? false
+
+  const bgColor = createMemo(() => {
+    if (hover && isHovered()) return theme.backgroundElement
+    return background ? theme.backgroundPanel : undefined
+  })
 
   return (
     <box
@@ -36,10 +43,12 @@ export function Card(props: CardProps) {
       paddingTop={padding}
       paddingBottom={padding}
       gap={gap}
-      backgroundColor={background ? theme.backgroundPanel : undefined}
+      backgroundColor={bgColor()}
       borderColor={border ? theme.border : undefined}
       borderStyle={border ? "single" : undefined}
       onMouseUp={props.onClick}
+      onMouseOver={() => hover && setIsHovered(true)}
+      onMouseOut={() => hover && setIsHovered(false)}
     >
       {props.children}
     </box>
