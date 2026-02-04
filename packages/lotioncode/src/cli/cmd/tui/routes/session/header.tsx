@@ -7,32 +7,11 @@ import { SplitBorder } from "@tui/component/border"
 import type { AssistantMessage, Session } from "@lotioncode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
-import { Installation } from "@/installation"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useToast } from "../../ui/toast"
 import { $ } from "bun"
 import { createStore } from "solid-js/store"
-
-const Title = (props: { session: Accessor<Session> }) => {
-  const { theme } = useTheme()
-  return (
-    <text fg={theme.text}>
-      <span style={{ bold: true }}>#</span> <span style={{ bold: true }}>{props.session().title}</span>
-      <span style={{ fg: theme.success }}> [GIT]</span>
-    </text>
-  )
-}
-
-const ContextInfo = (props: { context: Accessor<string | undefined>; cost: Accessor<string> }) => {
-  const { theme } = useTheme()
-  return (
-    <Show when={props.context()}>
-      <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
-        {props.context()} ({props.cost()})
-      </text>
-    </Show>
-  )
-}
+import { Card, ProgressBar, StatusIndicator, Breadcrumb } from "../../component/ui-primitives"
 
 export function Header() {
   const route = useRouteData("session")
@@ -105,17 +84,20 @@ export function Header() {
     }).format(total)
   })
 
-  const context = createMemo(() => {
+  const contextInfo = createMemo(() => {
     const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
-    if (!last) return
+    if (!last) return null
     const total =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
-    let result = total.toLocaleString()
-    if (model?.limit.context) {
-      result += "  " + Math.round((total / model.limit.context) * 100) + "%"
+    const limit = model?.limit.context
+    const percentage = limit ? Math.round((total / limit) * 100) : 0
+
+    return {
+      tokens: total,
+      percentage,
+      limit,
     }
-    return result
   })
 
   const { theme } = useTheme()
@@ -124,6 +106,17 @@ export function Header() {
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
+
+  const breadcrumbItems = createMemo(() => {
+    const items: Array<{ label: string; onClick?: () => void }> = [
+      { label: "Home", onClick: () => command.trigger("home") },
+    ]
+    if (session()?.parentID) {
+      items.push({ label: "Parent", onClick: () => command.trigger("session.parent") })
+    }
+    items.push({ label: session()?.title ?? "Session" })
+    return items
+  })
 
   return (
     <box flexShrink={0}>
@@ -142,91 +135,88 @@ export function Header() {
           <Match when={session()?.parentID}>
             <box flexDirection="column" gap={1}>
               <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={narrow() ? 1 : 0}>
-                <text fg={theme.text}>
-                  <b>Subagent session</b>
-                </text>
-                <box flexDirection="row" gap={1} flexShrink={0}>
-                  <ContextInfo context={context} cost={cost} />
-                  <text fg={theme.textMuted}>v{Installation.VERSION}</text>
+                <box flexDirection="column" gap={1}>
+                  <Breadcrumb items={breadcrumbItems()} />
+                  <box flexDirection="row" gap={2}>
+                    <Card
+                      padding={1}
+                      gap={0}
+                      border={false}
+                      hover={true}
+                      onClick={() => command.trigger("session.parent")}
+                    >
+                      <text fg={theme.text}>↑ Parent</text>
+                    </Card>
+                    <Card
+                      padding={1}
+                      gap={0}
+                      border={false}
+                      hover={true}
+                      onClick={() => command.trigger("session.child.previous")}
+                    >
+                      <text fg={theme.text}>← Prev</text>
+                    </Card>
+                    <Card
+                      padding={1}
+                      gap={0}
+                      border={false}
+                      hover={true}
+                      onClick={() => command.trigger("session.child.next")}
+                    >
+                      <text fg={theme.text}>Next →</text>
+                    </Card>
+                  </box>
                 </box>
-              </box>
-              <box flexDirection="row" gap={2}>
-                <box
-                  onMouseOver={() => setHover("parent")}
-                  onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.trigger("session.parent")}
-                  backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
-                >
-                  <text fg={theme.text}>
-                    Parent <span style={{ fg: theme.textMuted }}>{keybind.print("session_parent")}</span>
-                  </text>
-                </box>
-                <box
-                  onMouseOver={() => setHover("prev")}
-                  onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.trigger("session.child.previous")}
-                  backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
-                >
-                  <text fg={theme.text}>
-                    Prev <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
-                  </text>
-                </box>
-                <box
-                  onMouseOver={() => setHover("next")}
-                  onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.trigger("session.child.next")}
-                  backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
-                >
-                  <text fg={theme.text}>
-                    Next <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span>
-                  </text>
-                </box>
+                <Show when={contextInfo()}>
+                  {(info) => (
+                    <box flexDirection="column" alignItems="flex-end" gap={1}>
+                      <ProgressBar
+                        value={info().tokens}
+                        max={info().limit ?? 100000}
+                        width={15}
+                        showPercentage={true}
+                        variant={info().percentage > 90 ? "error" : info().percentage > 70 ? "warning" : "success"}
+                      />
+                      <text fg={theme.textMuted}>{cost()}</text>
+                    </box>
+                  )}
+                </Show>
               </box>
             </box>
           </Match>
           <Match when={true}>
             <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={1}>
-              <box flexDirection="row" gap={2}>
-                <Title session={session} />
+              <box flexDirection="column" gap={1}>
+                <Breadcrumb items={breadcrumbItems()} />
                 <box flexDirection="row" gap={1}>
-                  <box
-                    backgroundColor={gitLoading.pull ? theme.backgroundElement : theme.backgroundPanel}
-                    paddingLeft={1}
-                    paddingRight={1}
-                    onMouseUp={handleGitPull}
-                  >
+                  <Card padding={1} gap={0} border={false} hover={true} onClick={handleGitPull}>
                     <text fg={theme.text}>{gitLoading.pull ? "⏳" : "⬇"} Pull</text>
-                  </box>
-                  <box
-                    backgroundColor={gitLoading.push ? theme.backgroundElement : theme.backgroundPanel}
-                    paddingLeft={1}
-                    paddingRight={1}
-                    onMouseUp={handleGitPush}
-                  >
+                  </Card>
+                  <Card padding={1} gap={0} border={false} hover={true} onClick={handleGitPush}>
                     <text fg={theme.text}>{gitLoading.push ? "⏳" : "⬆"} Push</text>
-                  </box>
-                  <box
-                    backgroundColor={gitLoading.commit ? theme.backgroundElement : theme.backgroundPanel}
-                    paddingLeft={1}
-                    paddingRight={1}
-                    onMouseUp={handleGitCommit}
-                  >
+                  </Card>
+                  <Card padding={1} gap={0} border={false} hover={true} onClick={handleGitCommit}>
                     <text fg={theme.text}>{gitLoading.commit ? "⏳" : "✓"} Commit</text>
-                  </box>
-                  <box
-                    backgroundColor={gitLoading.pr ? theme.backgroundElement : theme.backgroundPanel}
-                    paddingLeft={1}
-                    paddingRight={1}
-                    onMouseUp={handleCreatePR}
-                  >
+                  </Card>
+                  <Card padding={1} gap={0} border={false} hover={true} onClick={handleCreatePR}>
                     <text fg={theme.text}>{gitLoading.pr ? "⏳" : "↗"} PR</text>
-                  </box>
+                  </Card>
                 </box>
               </box>
-              <box flexDirection="row" gap={1} flexShrink={0}>
-                <ContextInfo context={context} cost={cost} />
-                <text fg={theme.textMuted}>v{Installation.VERSION}</text>
-              </box>
+              <Show when={contextInfo()}>
+                {(info) => (
+                  <box flexDirection="column" alignItems="flex-end" gap={1}>
+                    <ProgressBar
+                      value={info().tokens}
+                      max={info().limit ?? 100000}
+                      width={15}
+                      showPercentage={true}
+                      variant={info().percentage > 90 ? "error" : info().percentage > 70 ? "warning" : "success"}
+                    />
+                    <text fg={theme.textMuted}>{cost()}</text>
+                  </box>
+                )}
+              </Show>
             </box>
           </Match>
         </Switch>
