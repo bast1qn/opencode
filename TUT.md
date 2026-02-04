@@ -2,9 +2,56 @@
 
 Complete guide to install LotionCode on Debian 12 and migrate data from OpenCode.
 
-## Quick Start (One Command)
+## 🚀 Mega Quick Start: Install + Migrate Everything
 
-Copy and paste this entire block into your terminal:
+**Copy and paste this ONE block** to install LotionCode AND migrate all OpenCode data:
+
+```bash
+#!/bin/bash
+set -e
+
+echo "🚀 Installing LotionCode + Migrating from OpenCode..."
+
+# Update system and install dependencies
+sudo apt update && sudo apt install -y curl unzip git
+
+# Install Bun
+curl -fsSL https://bun.sh/install | bash
+export PATH="$HOME/.bun/bin:$PATH"
+echo 'export PATH="$HOME/.bun/bin:$PATH"' >> ~/.bashrc
+
+# Create directories
+mkdir -p ~/.local/bin ~/.local/share/lotioncode ~/.local/state/lotioncode ~/.config/lotioncode
+
+# Download and install LotionCode
+cd /tmp
+curl -L -o lotioncode-linux-x64.zip "https://github.com/R44VC0RP/lotioncode/releases/latest/download/lotioncode-linux-x64.zip"
+unzip -o lotioncode-linux-x64.zip
+chmod +x lotioncode-linux-x64/bin/lotioncode
+cp lotioncode-linux-x64/bin/lotioncode ~/.local/bin/
+sudo cp lotioncode-linux-x64/bin/lotioncode /usr/local/bin/
+
+# Verify installation
+echo "✅ LotionCode installed: $(lotioncode --version)"
+
+# Check if OpenCode exists and migrate
+if [ -d "$HOME/.local/share/opencode" ]; then
+    echo "📦 OpenCode data found. Migrating to LotionCode..."
+    lotioncode migrate --from opencode
+    echo "✅ Migration complete!"
+else
+    echo "ℹ️  No OpenCode data found. Skipping migration."
+fi
+
+echo ""
+echo "🎉 LotionCode is ready! Start with: lotioncode"
+```
+
+---
+
+## 🔄 Quick Start (Install Only)
+
+If you only want to install LotionCode without migrating:
 
 ```bash
 # Update system and install dependencies
@@ -291,7 +338,53 @@ lotioncode migrate --from opencode --dry-run
 
 ---
 
-## Update LotionCode
+## 🔄 Update LotionCode
+
+### Automatic Update Script
+
+Create this script to easily update LotionCode when new versions are released:
+
+```bash
+# Create update script
+mkdir -p ~/.local/bin
+cat > ~/.local/bin/update-lotioncode << 'EOF'
+#!/bin/bash
+set -e
+
+echo "🔄 Updating LotionCode..."
+
+# Save current version
+OLD_VERSION=$(lotioncode --version 2>/dev/null || echo "none")
+echo "Current version: $OLD_VERSION"
+
+# Download latest
+cd /tmp
+curl -L -o lotioncode-linux-x64.zip \
+  "https://github.com/R44VC0RP/lotioncode/releases/latest/download/lotioncode-linux-x64.zip"
+unzip -o lotioncode-linux-x64.zip
+
+# Install new version
+chmod +x lotioncode-linux-x64/bin/lotioncode
+cp lotioncode-linux-x64/bin/lotioncode ~/.local/bin/
+sudo cp lotioncode-linux-x64/bin/lotioncode /usr/local/bin/
+
+# Show new version
+NEW_VERSION=$(lotioncode --version)
+echo "✅ Updated to: $NEW_VERSION"
+
+if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
+    echo "🎉 Successfully updated from $OLD_VERSION to $NEW_VERSION!"
+else
+    echo "ℹ️  Already on latest version"
+fi
+EOF
+
+chmod +x ~/.local/bin/update-lotioncode
+
+echo "✅ Update script created! Use: update-lotioncode"
+```
+
+### Manual Update
 
 ```bash
 # Download latest version
@@ -306,6 +399,36 @@ sudo cp lotioncode-linux-x64/bin/lotioncode /usr/local/bin/
 
 # Verify
 lotioncode --version
+```
+
+### Update from Source (Latest Code Changes)
+
+If you want the absolute latest code changes (not just releases):
+
+```bash
+# Clone or update repository
+if [ -d "$HOME/lotioncode" ]; then
+    cd ~/lotioncode
+    git pull origin dev
+else
+    cd ~
+    git clone https://github.com/R44VC0RP/lotioncode.git
+    cd lotioncode
+fi
+
+# Install dependencies
+bun install
+
+# Build latest version
+LOTIONCODE_VERSION="dev" bun run packages/lotioncode/script/build.ts --single
+
+# Install
+cp packages/lotioncode/dist/lotioncode-linux-x64/bin/lotioncode ~/.local/bin/
+sudo cp packages/lotioncode/dist/lotioncode-linux-x64/bin/lotioncode /usr/local/bin/
+
+# Verify
+lotioncode --version
+echo "✅ Built and installed from latest source!"
 ```
 
 ---
