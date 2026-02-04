@@ -18,7 +18,6 @@ import { useDialog } from "../ui/dialog"
 import { DialogTokenUsage } from "../component/dialog-token-usage"
 import { DialogMetrics } from "../component/dialog-metrics"
 
-// TODO: what is the best way to do this?
 let once = false
 
 export function Home() {
@@ -30,30 +29,23 @@ export function Home() {
   const command = useCommandDialog()
   const dialog = useDialog()
   const mcp = createMemo(() => Object.keys(sync.data.mcp).length > 0)
-  const mcpError = createMemo(() => {
-    return Object.values(sync.data.mcp).some((x) => x.status === "failed")
-  })
+  const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
 
-  const connectedMcpCount = createMemo(() => {
-    return Object.values(sync.data.mcp).filter((x) => x.status === "connected").length
-  })
+  const connectedMcpCount = createMemo(
+    () => Object.values(sync.data.mcp).filter((x) => x.status === "connected").length,
+  )
 
   const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
   const tipsHidden = createMemo(() => kv.get("tips_hidden", false))
-  const showTips = createMemo(() => {
-    if (isFirstTimeUser()) return false
-    return !tipsHidden()
-  })
+  const showTips = createMemo(() => !isFirstTimeUser() && !tipsHidden())
 
-  // Recent sessions (last 5)
-  const recentSessions = createMemo(() => {
-    return [...sync.data.session]
+  const recentSessions = createMemo(() =>
+    [...sync.data.session]
       .filter((s) => !s.parentID)
       .sort((a, b) => b.time.updated - a.time.updated)
-      .slice(0, 5)
-  })
+      .slice(0, 3),
+  )
 
-  // Total usage stats
   const usageStats = createMemo(() => {
     let totalCost = 0
     let totalTokens = 0
@@ -87,32 +79,26 @@ export function Home() {
       title: "Token Usage",
       value: "token.usage",
       category: "Dashboard",
-      onSelect: () => {
-        dialog.replace(() => <DialogTokenUsage />)
-      },
+      onSelect: () => dialog.replace(() => <DialogTokenUsage />),
     },
     {
       title: "Performance Metrics",
       value: "performance.metrics",
       category: "Dashboard",
-      onSelect: () => {
-        dialog.replace(() => <DialogMetrics />)
-      },
+      onSelect: () => dialog.replace(() => <DialogMetrics />),
     },
   ])
 
   const Hint = (
     <Show when={connectedMcpCount() > 0}>
-      <box flexShrink={0} flexDirection="row" gap={1}>
+      <box flexDirection="row" gap={1}>
         <text fg={theme.text}>
           <Switch>
             <Match when={mcpError()}>
-              <span style={{ fg: theme.error }}>•</span> mcp errors{" "}
-              <span style={{ fg: theme.textMuted }}>ctrl+x s</span>
+              <span style={{ fg: theme.error }}>•</span> mcp errors
             </Match>
             <Match when={true}>
-              <span style={{ fg: theme.success }}>•</span>{" "}
-              {Locale.pluralize(connectedMcpCount(), "{} mcp server", "{} mcp servers")}
+              <span style={{ fg: theme.success }}>•</span> {connectedMcpCount()} mcp
             </Match>
           </Switch>
         </text>
@@ -135,37 +121,12 @@ export function Home() {
   })
   const directory = useDirectory()
 
-  const keybind = useKeybind()
-
   return (
     <>
-      <box flexGrow={1} paddingLeft={2} paddingRight={2} gap={1}>
-        {/* Header with Logo */}
-        <box height={2} />
-        <box justifyContent="center" alignItems="center">
-          <Logo />
-        </box>
+      <box flexGrow={1} justifyContent="center" alignItems="center" paddingLeft={2} paddingRight={2} gap={1}>
+        <Logo />
 
-        {/* Quick Stats */}
-        <Show when={!isFirstTimeUser()}>
-          <box flexDirection="row" justifyContent="center" gap={4} paddingTop={1} paddingBottom={1}>
-            <box flexDirection="row" gap={1}>
-              <text fg={theme.textMuted}>Sessions:</text>
-              <text fg={theme.text}>{sync.data.session.length}</text>
-            </box>
-            <box flexDirection="row" gap={1}>
-              <text fg={theme.textMuted}>Tokens:</text>
-              <text fg={theme.text}>{usageStats().totalTokens.toLocaleString()}</text>
-            </box>
-            <box flexDirection="row" gap={1}>
-              <text fg={theme.textMuted}>Cost:</text>
-              <text fg={theme.text}>${usageStats().totalCost.toFixed(4)}</text>
-            </box>
-          </box>
-        </Show>
-
-        {/* Prompt Input */}
-        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1}>
+        <box width="100%" maxWidth={75} paddingTop={1}>
           <Prompt
             ref={(r) => {
               prompt = r
@@ -175,43 +136,20 @@ export function Home() {
           />
         </box>
 
-        {/* Quick Actions */}
-        <box flexDirection="row" justifyContent="center" gap={2} paddingTop={1} paddingBottom={1}>
-          <box
-            backgroundColor={theme.backgroundElement}
-            paddingLeft={1}
-            paddingRight={1}
-            onMouseUp={() => command.trigger("token.usage")}
-          >
-            <text fg={theme.text}>📊 Token Usage</text>
+        <Show when={!isFirstTimeUser()}>
+          <box flexDirection="row" gap={3} paddingTop={1}>
+            <text fg={theme.textMuted}>{sync.data.session.length} sessions</text>
+            <text fg={theme.textMuted}>{usageStats().totalTokens.toLocaleString()} tokens</text>
+            <text fg={theme.textMuted}>${usageStats().totalCost.toFixed(2)}</text>
           </box>
-          <box
-            backgroundColor={theme.backgroundElement}
-            paddingLeft={1}
-            paddingRight={1}
-            onMouseUp={() => command.trigger("performance.metrics")}
-          >
-            <text fg={theme.text}>⚡ Metrics</text>
-          </box>
-          <box
-            backgroundColor={theme.backgroundElement}
-            paddingLeft={1}
-            paddingRight={1}
-            onMouseUp={() => command.trigger("session.list")}
-          >
-            <text fg={theme.text}>📁 Sessions</text>
-          </box>
-        </box>
+        </Show>
 
-        {/* Recent Sessions */}
         <Show when={recentSessions().length > 0}>
-          <box paddingTop={2} width="100%" maxWidth={75}>
+          <box width="100%" maxWidth={75} paddingTop={2}>
             <box flexDirection="row" justifyContent="space-between" paddingBottom={1}>
-              <text fg={theme.text}>
-                <b>Recent Sessions</b>
-              </text>
+              <text fg={theme.text}>Recent</text>
               <text fg={theme.textMuted} onMouseUp={() => command.trigger("session.list")}>
-                View all →
+                View all
               </text>
             </box>
             <box flexDirection="column" gap={1}>
@@ -220,25 +158,14 @@ export function Home() {
                   <box
                     flexDirection="row"
                     justifyContent="space-between"
-                    backgroundColor={theme.backgroundElement}
                     paddingLeft={1}
                     paddingRight={1}
-                    paddingTop={1}
-                    paddingBottom={1}
-                    onMouseUp={() => {
-                      // Navigate to session
-                      command.trigger(`session.open.${session.id}`)
-                    }}
+                    onMouseUp={() => command.trigger(`session.open.${session.id}`)}
                   >
-                    <box flexDirection="column" flexGrow={1}>
-                      <text fg={theme.text} wrapMode="word">
-                        {session.title}
-                      </text>
-                      <text fg={theme.textMuted}>{Locale.todayTimeOrDateTime(session.time.updated)}</text>
-                    </box>
-                    <box flexShrink={0}>
-                      <text fg={theme.textMuted}>→</text>
-                    </box>
+                    <text fg={theme.text} wrapMode="word">
+                      {session.title}
+                    </text>
+                    <text fg={theme.textMuted}>{Locale.todayTimeOrDateTime(session.time.updated)}</text>
                   </box>
                 )}
               </For>
@@ -246,39 +173,19 @@ export function Home() {
           </box>
         </Show>
 
-        {/* Tips */}
-        <box height={3} width="100%" maxWidth={75} alignItems="center" paddingTop={2}>
-          <Show when={showTips()}>
-            <Tips />
-          </Show>
-        </box>
+        <box height={2} />
+
+        <Show when={showTips()}>
+          <Tips />
+        </Show>
 
         <Toast />
       </box>
 
-      {/* Footer */}
-      <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
+      <box padding={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
         <text fg={theme.textMuted}>{directory()}</text>
-        <box gap={1} flexDirection="row" flexShrink={0}>
-          <Show when={mcp()}>
-            <text fg={theme.text}>
-              <Switch>
-                <Match when={mcpError()}>
-                  <span style={{ fg: theme.error }}>⊙ </span>
-                </Match>
-                <Match when={true}>
-                  <span style={{ fg: connectedMcpCount() > 0 ? theme.success : theme.textMuted }}>⊙ </span>
-                </Match>
-              </Switch>
-              {connectedMcpCount()} MCP
-            </text>
-            <text fg={theme.textMuted}>/status</text>
-          </Show>
-        </box>
         <box flexGrow={1} />
-        <box flexShrink={0}>
-          <text fg={theme.textMuted}>v{Installation.VERSION}</text>
-        </box>
+        <text fg={theme.textMuted}>v{Installation.VERSION}</text>
       </box>
     </>
   )
